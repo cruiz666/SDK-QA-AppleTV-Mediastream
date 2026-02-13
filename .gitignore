@@ -1,0 +1,72 @@
+# Xcode / tvOS
+#
+# User-specific
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+
+# Build
+build/
+DerivedData/
+
+# Archives
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# CocoaPods
+Pods/
+Podfile.lock
+*.xcworkspace
+!default.xcworkspace
+
+# Carthage
+Carthage/Build/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Thumbnails
+Thumbs.db
+ehthumbs.db
+
+# IDE
+*.swp
+*.swo
+*~
+.idea/
+*.hmap
+*.ipa
+
+# Crash / logs
+*.crash
+*.log
+
+# App packaging
+*.mobileprovision
+*.certSigningRequest
+
+# Temporary
+*.tmp
+*.temp
+tmp/
+temp/
