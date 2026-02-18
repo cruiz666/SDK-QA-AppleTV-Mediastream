@@ -12,6 +12,7 @@ import MediastreamPlatformSDKAppleTV
 class CaseDetailViewController: UIViewController {
 
     let testCase: TestCase
+    private let startAtSeconds: Int?
     private var player: MediastreamPlatformSDK?
 
     /// For Small Container only: player sits in this view.
@@ -32,6 +33,15 @@ class CaseDetailViewController: UIViewController {
         return l
     }()
 
+    /// For Small Container: expands to full screen where native controls are visible.
+    private lazy var expandButton: UIButton = {
+        let b = UIButton(type: .system)
+        b.setTitle("Expand to full screen", for: .normal)
+        b.titleLabel?.font = .systemFont(ofSize: 36, weight: .medium)
+        b.addTarget(self, action: #selector(expandToFullScreenTapped), for: .primaryActionTriggered)
+        return b
+    }()
+
     private var isSmallContainer: Bool { testCase.type == .videoSmallContainer }
 
     private lazy var messageLabel: UILabel = {
@@ -44,8 +54,9 @@ class CaseDetailViewController: UIViewController {
         return label
     }()
 
-    init(testCase: TestCase) {
+    init(testCase: TestCase, startAtSeconds: Int? = nil) {
         self.testCase = testCase
+        self.startAtSeconds = startAtSeconds
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -58,7 +69,7 @@ class CaseDetailViewController: UIViewController {
         title = testCase.title
         view.backgroundColor = .black
 
-        guard let config = PlayerConfigBuilder.config(for: testCase) else {
+        guard var config = PlayerConfigBuilder.config(for: testCase) else {
             messageLabel.text = PlayerConfigBuilder.missingResourceMessage(for: testCase)
                 ?? "Unable to build config for \(testCase.type.rawValue)"
             view.addSubview(messageLabel)
@@ -71,6 +82,9 @@ class CaseDetailViewController: UIViewController {
             print("[SDK-QA] Entered here: \(testCase.displayTitle) — config unavailable")
             return
         }
+        if let startAt = startAtSeconds, startAt > 0 {
+            config.startAt = startAt
+        }
 
         let mdstrm = MediastreamPlatformSDK()
         addChild(mdstrm)
@@ -78,6 +92,7 @@ class CaseDetailViewController: UIViewController {
         if isSmallContainer {
             view.addSubview(playerContainerView)
             view.addSubview(contentAreaLabel)
+            view.addSubview(expandButton)
             playerContainerView.addSubview(mdstrm.view)
         } else {
             view.addSubview(mdstrm.view)
@@ -100,11 +115,15 @@ class CaseDetailViewController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        requestFocusOnPlayer()
-        triggerPlayerControlsAppearance()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.triggerPlayerControlsAppearance()
-            self?.requestFocusOnPlayer()
+        if isPlayerPresentedModally {
+            restorePlayerToSmallContainer()
+        } else {
+            requestFocusOnPlayer()
+            triggerPlayerControlsAppearance()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                self?.triggerPlayerControlsAppearance()
+                self?.requestFocusOnPlayer()
+            }
         }
     }
 
@@ -139,19 +158,50 @@ class CaseDetailViewController: UIViewController {
         if isSmallContainer {
             let topPadding: CGFloat = 40
             let playerHeight = h * 0.52
+            let contentTop = topPadding + playerHeight + 40
             playerContainerView.frame = CGRect(x: 0, y: topPadding, width: w, height: playerHeight)
             playerView.frame = playerContainerView.bounds
-            contentAreaLabel.frame = CGRect(x: 60, y: topPadding + playerHeight + 40, width: w - 120, height: max(0, h - (topPadding + playerHeight + 80)))
+            expandButton.sizeToFit()
+            let buttonHeight: CGFloat = 60
+            expandButton.frame = CGRect(x: 60, y: contentTop, width: w - 120, height: buttonHeight)
+            contentAreaLabel.frame = CGRect(x: 60, y: contentTop + buttonHeight + 24, width: w - 120, height: max(0, h - (contentTop + buttonHeight + 24 + 80)))
         } else {
             playerView.frame = view.bounds
         }
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        if isSmallContainer, let playerView = player?.view {
+            return [playerView, expandButton]
+        }
         if let playerView = player?.view {
             return [playerView]
         }
         return super.preferredFocusEnvironments
+    }
+
+    private var isPlayerPresentedModally = false
+
+    @objc private func expandToFullScreenTapped() {
+        guard let mdstrm = player else { return }
+        isPlayerPresentedModally = true
+        mdstrm.willMove(toParent: nil)
+        mdstrm.view.removeFromSuperview()
+        mdstrm.removeFromParent()
+        mdstrm.modalPresentationStyle = .fullScreen
+        present(mdstrm, animated: true)
+    }
+
+    private func restorePlayerToSmallContainer() {
+        guard let mdstrm = player else { return }
+        isPlayerPresentedModally = false
+        addChild(mdstrm)
+        playerContainerView.addSubview(mdstrm.view)
+        mdstrm.view.frame = playerContainerView.bounds
+        mdstrm.didMove(toParent: self)
+        mdstrm.play()
+        triggerPlayerControlsAppearance()
+        requestFocusOnPlayer()
     }
 
     /// Next Episode Custom: on nextEpisodeIncoming, call updateNextEpisode with next ID in chain (same as SDKQAiOS).
@@ -178,7 +228,9 @@ class CaseDetailViewController: UIViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        player?.releasePlayer()
+        if !isPlayerPresentedModally {
+            player?.releasePlayer()
+        }
     }
 
     deinit {
